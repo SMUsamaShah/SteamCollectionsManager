@@ -539,6 +539,74 @@ function getCollectionsForGame(appid) {
 // ════════════════════════════════════════════════════════
 const CACHE_PREFIX = 'steam_meta_';
 
+// ── PROXY ROTATION ────────────────────────────────────────
+// Each proxy: { name, build(url)->proxyUrl, parse(res)->steamJsonString|null }
+// parse() returns the raw Steam API JSON string, or null on failure.
+// Proxies that wrap (like allorigins) extract .contents; raw proxies just return text.
+
+const PROXIES = [
+  {
+    // Raw proxy, returns Steam JSON directly. New URL format as of late 2024.
+    name: 'corsproxy.io',
+    build: u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    parse: async res => res.ok ? res.text() : null,
+  },
+  {
+    // Wraps response in JSON: { contents: "<steam json string>" }
+    name: 'allorigins',
+    build: u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+    parse: async res => {
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.contents ?? null;
+    },
+  },
+  {
+    // Raw proxy. GET only, 625KB limit, ~5 req/sec.
+    name: 'codetabs',
+    build: u => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
+    parse: async res => res.ok ? res.text() : null,
+  },
+  {
+    // Raw proxy. Path-based: full target URL appended after base. 100 req/hour.
+    name: 'cors.x2u.in',
+    build: u => `https://cors.x2u.in/${u}`,
+    parse: async res => res.ok ? res.text() : null,
+  },
+  {
+    // cors-anywhere style. Path-based: full target URL appended. 50 req/hour.
+    // Heroku app — may sleep after inactivity (first request wakes it).
+    name: 'cors-anywhere',
+    build: u => `https://cors-anywhere.herokuapp.com/${u}`,
+    parse: async res => res.ok ? res.text() : null,
+  },
+];
+
+// Per-proxy state: throttled until timestamp
+const _proxyThrottle = {}; // name -> unthrottledAtMs
+let _proxyIndex = 0;
+
+function getNextProxy() {
+  const now = Date.now();
+  // Try proxies round-robin, skipping throttled ones
+  for (let i = 0; i < PROXIES.length; i++) {
+    const idx = (_proxyIndex + i) % PROXIES.length;
+    const p = PROXIES[idx];
+    if (!_proxyThrottle[p.name] || now >= _proxyThrottle[p.name]) {
+      _proxyIndex = (idx + 1) % PROXIES.length; // advance for next call
+      return p;
+    }
+  }
+  // All throttled — return least-throttled one anyway
+  return PROXIES.reduce((a, b) =>
+    (_proxyThrottle[a.name] || 0) < (_proxyThrottle[b.name] || 0) ? a : b
+  );
+}
+
+function throttleProxy(name, ms = 60_000) {
+  _proxyThrottle[name] = Date.now() + ms;
+}
+
 function loadCachedMeta(appid) {
   try {
     const raw = localStorage.getItem(CACHE_PREFIX + appid);
@@ -556,19 +624,31 @@ async function fetchSingleMeta(appid) {
   if (cached) { state.gameCache[appid] = cached; return cached; }
 
   const storeUrl = `https://store.steampowered.com/api/appdetails?appids=${appid}&filters=basic,genres,developers,release_date,metacritic,price_overview`;
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(storeUrl)}`;
+
+  const proxy = getNextProxy();
+  const proxyUrl = proxy.build(storeUrl);
 
   try {
-    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(20000) });
-    if (res.status === 429 || res.status === 503 || res.status === 502) {
-      return null; // rate limited — caller handles retry, do NOT cache
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
+
+    if (res.status === 429) {
+      throttleProxy(proxy.name, 90_000); // back off 90s for this proxy
+      return null; // caller will retry via worker
     }
-    if (!res.ok) return null;
-    const outer = await res.json();
-    const inner = JSON.parse(outer.contents);
+    if (res.status === 503 || res.status === 502 || res.status === 521 || res.status === 524) {
+      throttleProxy(proxy.name, 30_000);
+      return null;
+    }
+
+    const steamText = await proxy.parse(res);
+    if (!steamText) return null;
+
+    let inner;
+    try { inner = JSON.parse(steamText); } catch { return null; }
+
     const entry = inner[String(appid)];
     if (!entry || !entry.success) {
-      // App not found on Steam Store — cache so we don't keep retrying
+      // Genuine "not on Store" — cache to stop retrying
       const fallback = { appid, name: null, header_image: null, failed: true };
       saveCachedMeta(appid, fallback);
       state.gameCache[appid] = fallback;
@@ -592,10 +672,11 @@ async function fetchSingleMeta(appid) {
     state.gameCache[appid] = meta;
     return meta;
   } catch(e) {
-    return null; // network error — do NOT cache, allow retry on next scroll
+    // Network/timeout — short throttle so we don't hammer a dead proxy
+    throttleProxy(proxy.name, 15_000);
+    return null;
   }
 }
-
 async function fetchAllMetadata() {
   const allApps = getAllApps();
   const toFetch = allApps.filter(id => !state.gameCache[id] || state.gameCache[id].failed);
@@ -605,39 +686,25 @@ async function fetchAllMetadata() {
   state.fetchActive = true;
   document.getElementById('fetchBar').classList.add('visible');
 
+  const queue = [...toFetch];
   let done = 0;
-  for (const appid of toFetch) {
-    if (state.fetchCancel) break;
-    document.getElementById('fetchStatus').textContent = `Fetching metadata… ${done}/${toFetch.length}`;
-    document.getElementById('fetchFill').style.width = (done/toFetch.length*100) + '%';
+
+  while (queue.length && !state.fetchCancel) {
+    const appid = queue.shift();
+    const activeProxies = PROXIES.filter(p => !_proxyThrottle[p.name] || Date.now() >= _proxyThrottle[p.name]).length;
+    document.getElementById('fetchStatus').textContent =
+      `Fetching metadata\u2026 ${done}/${toFetch.length} (${activeProxies}/${PROXIES.length} proxies active)`;
+    document.getElementById('fetchFill').style.width = (done / toFetch.length * 100) + '%';
+
     const result = await fetchSingleMeta(appid);
-	const queue = [...toFetch];
 
-	while (queue.length && !state.fetchCancel) {
-	  const appid = queue.shift();
+    if (result === null) {
+      queue.push(appid);
+      if (queue[0] === appid) await new Promise(r => setTimeout(r, 5000));
+      else await new Promise(r => setTimeout(r, 1000));
+      continue;
+    }
 
-	  document.getElementById('fetchStatus').textContent = `Fetching metadata… ${done}/${toFetch.length}`;
-	  document.getElementById('fetchFill').style.width = (done/toFetch.length*100) + '%';
-
-	  const result = await fetchSingleMeta(appid);
-
-	  if (result === null) {
-		queue.push(appid); // defer until all other games have had a turn
-		await new Promise(r => setTimeout(r, 1000));
-
-		// Prevent tight looping if every remaining request is failing
-		if (queue[0] === appid) {
-		  await new Promise(r => setTimeout(r, 5000));
-		}
-
-		continue;
-	  }
-
-	  done++;
-	  const card = document.querySelector(`[data-appid="${appid}"]`);
-	  if (card) refreshCard(card, appid);
-	  await new Promise(r => setTimeout(r, 400));
-	}
     done++;
     const card = document.querySelector(`[data-appid="${appid}"]`);
     if (card) refreshCard(card, appid);
