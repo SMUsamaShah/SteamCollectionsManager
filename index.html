@@ -655,6 +655,12 @@ async function fetchSingleMeta(appid) {
       throttleProxy(proxy.name, 30_000);
       return null;
     }
+    // Any other non-OK status should also temporarily sideline this proxy.
+    // Otherwise you can get stuck forever on something like 500.
+    if (!res.ok) {
+      throttleProxy(proxy.name, 15_000);
+      return null;
+    }
 
     const steamText = await proxy.parse(res);
     if (!steamText) return null;
