@@ -651,7 +651,7 @@ async function fetchSingleMeta(appid) {
       throttleProxy(proxy.name, 90_000); // back off 90s for this proxy
       return null; // caller will retry via worker
     }
-    if (res.status === 503 || res.status === 502 || res.status === 521 || res.status === 524) {
+    if (res.status === 403 || res.status === 503 || res.status === 502 || res.status === 521 || res.status === 524) {
       throttleProxy(proxy.name, 30_000);
       return null;
     }
