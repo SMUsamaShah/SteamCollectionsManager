@@ -611,12 +611,33 @@ async function fetchAllMetadata() {
     document.getElementById('fetchStatus').textContent = `Fetching metadata… ${done}/${toFetch.length}`;
     document.getElementById('fetchFill').style.width = (done/toFetch.length*100) + '%';
     const result = await fetchSingleMeta(appid);
-    if (result === null) {
-      // Rate limited — back off and retry once
-      await new Promise(r => setTimeout(r, 3000));
-      const retry = await fetchSingleMeta(appid);
-      if (!retry) continue; // skip if still failing
-    }
+	const queue = [...toFetch];
+
+	while (queue.length && !state.fetchCancel) {
+	  const appid = queue.shift();
+
+	  document.getElementById('fetchStatus').textContent = `Fetching metadata… ${done}/${toFetch.length}`;
+	  document.getElementById('fetchFill').style.width = (done/toFetch.length*100) + '%';
+
+	  const result = await fetchSingleMeta(appid);
+
+	  if (result === null) {
+		queue.push(appid); // defer until all other games have had a turn
+		await new Promise(r => setTimeout(r, 1000));
+
+		// Prevent tight looping if every remaining request is failing
+		if (queue[0] === appid) {
+		  await new Promise(r => setTimeout(r, 5000));
+		}
+
+		continue;
+	  }
+
+	  done++;
+	  const card = document.querySelector(`[data-appid="${appid}"]`);
+	  if (card) refreshCard(card, appid);
+	  await new Promise(r => setTimeout(r, 400));
+	}
     done++;
     const card = document.querySelector(`[data-appid="${appid}"]`);
     if (card) refreshCard(card, appid);
@@ -680,10 +701,21 @@ async function startFetchWorker() {
     if (state.gameCache[appid]) continue; // arrived via cache since queuing
     const result = await fetchSingleMeta(appid);
     if (result === null) {
-      // Rate limited — pause and re-queue at front for next attempt
-      _fetchQueue.unshift(appid);
-      _queued.add(appid); // keep in set so we don't double-add from observer
-      await new Promise(r => setTimeout(r, 3000));
+      // Request failed. Push it to the end so other games can proceed first.
+      _fetchQueue.push(appid);
+
+      // Keep it marked as queued so the observer does not enqueue duplicates.
+      _queued.add(appid);
+
+      // Small backoff before processing the next item.
+      await new Promise(r => setTimeout(r, 1000));
+
+      // If everything left in the queue is repeatedly failing, avoid an infinite
+      // hot loop by pausing a bit longer once we wrap around.
+      if (_fetchQueue[0] === appid) {
+        await new Promise(r => setTimeout(r, 5000));
+      }
+
       continue;
     }
     const card = document.querySelector(`[data-appid="${appid}"]`);
