@@ -4,3 +4,8 @@
 - Modify collections as you like.
 - Export
 - Exit steam and replace the JSON
+
+
+# Screenshot
+
+![screenshot](image_18.png)
