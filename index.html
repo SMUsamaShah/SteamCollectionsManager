@@ -1,0 +1,1524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Steam Collection Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b0d13;
+  --bg2: #111520;
+  --bg3: #181c2a;
+  --card: #141820;
+  --border: #252a3e;
+  --border2: #2e3450;
+  --accent: #f0a030;
+  --accent-dim: rgba(240,160,48,0.12);
+  --accent2: #5b8af5;
+  --accent2-dim: rgba(91,138,245,0.12);
+  --text: #dce0ee;
+  --text2: #8891b0;
+  --muted: #464c68;
+  --danger: #e05555;
+  --danger-dim: rgba(224,85,85,0.12);
+  --success: #4cc980;
+  --success-dim: rgba(76,201,128,0.12);
+  --warn: #e8a830;
+  --r: 6px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Barlow', sans-serif; font-size: 14px; overflow: hidden; height: 100vh; }
+button { cursor: pointer; font-family: inherit; font-size: 13px; }
+input, textarea, select { font-family: inherit; }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* ── LOADER ── */
+#loader {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+  flex-direction: column;
+}
+.loader-box {
+  width: 520px; background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 12px; padding: 40px; text-align: center;
+}
+.loader-logo {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 600;
+  letter-spacing: 6px; color: var(--accent); text-transform: uppercase; margin-bottom: 8px;
+}
+.loader-title {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 32px; font-weight: 700;
+  color: var(--text); margin-bottom: 4px; letter-spacing: 1px;
+}
+.loader-sub { color: var(--text2); font-size: 13px; margin-bottom: 32px; }
+.drop-zone {
+  border: 2px dashed var(--border2); border-radius: 8px; padding: 36px 20px;
+  transition: border-color 0.2s, background 0.2s; cursor: pointer; margin-bottom: 20px;
+}
+.drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: var(--accent-dim); }
+.drop-zone p { color: var(--text2); font-size: 14px; margin-bottom: 12px; }
+.drop-zone .drop-icon { font-size: 40px; margin-bottom: 12px; display: block; }
+.paste-section { margin-top: 16px; }
+.paste-section textarea {
+  width: 100%; height: 80px; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text2); padding: 10px; resize: none; font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.paste-section textarea:focus { outline: none; border-color: var(--accent2); }
+.loader-err { color: var(--danger); font-size: 13px; margin-top: 12px; min-height: 18px; }
+
+/* ── BUTTONS ── */
+.btn {
+  padding: 8px 16px; border-radius: var(--r); border: 1px solid var(--border2);
+  background: var(--bg3); color: var(--text); transition: all 0.15s; font-weight: 500;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.btn-accent { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
+.btn-accent:hover { background: #fbb840; border-color: #fbb840; color: #111; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-icon { padding: 6px 8px; font-size: 14px; border-radius: var(--r); background: transparent; border: 1px solid transparent; color: var(--text2); transition: all 0.15s; }
+.btn-icon:hover { background: var(--bg3); border-color: var(--border); color: var(--text); }
+.btn-danger { border-color: var(--danger); color: var(--danger); }
+.btn-danger:hover { background: var(--danger-dim); }
+.btn-success { background: var(--success); color: #111; border-color: var(--success); font-weight: 600; }
+.btn-success:hover { background: #60e090; }
+.btn-primary { background: var(--accent2-dim); border-color: var(--accent2); color: var(--accent2); }
+.btn-primary:hover { background: var(--accent2); color: #fff; }
+
+/* ── APP LAYOUT ── */
+#app { display: none; height: 100vh; display: none; }
+#app.visible { display: grid; grid-template-columns: 240px 1fr; grid-template-rows: 1fr; }
+#app.detail-open { grid-template-columns: 240px 1fr 340px; }
+
+/* ── SIDEBAR ── */
+#sidebar {
+  background: var(--bg2); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.sidebar-head {
+  padding: 16px 16px 12px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sidebar-logo {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 11px;
+  letter-spacing: 4px; color: var(--accent); font-weight: 700; text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.sidebar-title {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-weight: 700;
+  color: var(--text); letter-spacing: 0.5px;
+}
+.sidebar-actions {
+  padding: 10px; border-bottom: 1px solid var(--border);
+  display: flex; gap: 6px; flex-shrink: 0;
+}
+.sidebar-actions .btn { flex: 1; font-size: 12px; padding: 6px 8px; }
+.collections-list { flex: 1; overflow-y: auto; padding: 6px; }
+.coll-group-label {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 1.5px; padding: 8px 8px 4px;
+}
+.coll-item {
+  display: flex; align-items: center; padding: 7px 8px; border-radius: var(--r);
+  cursor: pointer; transition: all 0.12s; gap: 8px; border: 1px solid transparent;
+  position: relative;
+}
+.coll-item:hover { background: var(--bg3); }
+.coll-item.active { background: var(--accent-dim); border-color: rgba(240,160,48,0.25); }
+.coll-item.active .coll-name { color: var(--accent); }
+.coll-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.coll-name { flex: 1; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.coll-count {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text2);
+  background: var(--bg); padding: 1px 6px; border-radius: 10px; flex-shrink: 0;
+}
+.coll-smart { font-size: 10px; color: var(--accent2); margin-left: 2px; }
+.coll-item-actions { display: none; gap: 2px; }
+.coll-item:hover .coll-item-actions { display: flex; }
+.coll-item:hover .coll-count { display: none; }
+.sidebar-footer { padding: 12px; border-top: 1px solid var(--border); flex-shrink: 0; }
+
+/* ── MAIN AREA ── */
+#main { display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+.toolbar {
+  padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg2);
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.view-title {
+  font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 700;
+  color: var(--text); flex: 0 0 auto; min-width: 0; max-width: 200px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.toolbar-sep { width: 1px; height: 20px; background: var(--border2); flex-shrink: 0; }
+.search-wrap { position: relative; flex: 1; min-width: 0; }
+.search-wrap input {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+  padding: 7px 12px 7px 32px; border-radius: var(--r); font-size: 13px; outline: none;
+  transition: border-color 0.15s;
+}
+.search-wrap input:focus { border-color: var(--accent2); }
+.search-wrap .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 14px; pointer-events: none; }
+.toolbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.sort-select {
+  background: var(--bg3); border: 1px solid var(--border); color: var(--text2);
+  padding: 6px 10px; border-radius: var(--r); font-size: 12px; outline: none; cursor: pointer;
+}
+.sort-select:focus { border-color: var(--accent2); }
+.toolbar-count { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+
+/* ── BULK BAR ── */
+.bulk-bar {
+  padding: 8px 16px; background: var(--accent-dim); border-bottom: 1px solid rgba(240,160,48,0.2);
+  display: none; align-items: center; gap: 10px; font-size: 13px;
+}
+.bulk-bar.active { display: flex; }
+.bulk-bar-label { color: var(--accent); font-weight: 600; }
+.bulk-bar-actions { display: flex; gap: 6px; margin-left: auto; }
+
+/* ── FETCH BAR ── */
+.fetch-bar {
+  padding: 6px 16px; background: var(--bg2); border-bottom: 1px solid var(--border);
+  display: none; align-items: center; gap: 10px; font-size: 12px;
+}
+.fetch-bar.visible { display: flex; }
+.fetch-progress-bg { flex: 1; height: 4px; background: var(--border); border-radius: 2px; }
+.fetch-progress-fill { height: 4px; background: var(--accent); border-radius: 2px; transition: width 0.3s; width: 0%; }
+
+/* ── GAMES GRID ── */
+.games-wrap { flex: 1; overflow-y: auto; padding: 16px; }
+.games-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.game-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--r);
+  overflow: hidden; cursor: pointer; transition: all 0.15s; position: relative;
+}
+.game-card:hover { border-color: var(--border2); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+.game-card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+.game-card.active { border-color: var(--accent2); box-shadow: 0 0 0 2px var(--accent2-dim); }
+.game-card-thumb { width: 100%; aspect-ratio: 460/215; object-fit: cover; background: var(--bg3); display: block; }
+.game-card-thumb-placeholder { width: 100%; aspect-ratio: 460/215; background: var(--bg3); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 28px; }
+.game-card-body { padding: 8px 10px; }
+.game-card-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+.game-card-id { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
+.game-card-tags { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; }
+.game-card-tag {
+  font-size: 10px; padding: 1px 5px; border-radius: 3px; font-weight: 600;
+  font-family: 'Barlow Condensed', sans-serif; letter-spacing: 0.5px; white-space: nowrap;
+}
+.game-card-checkbox {
+  position: absolute; top: 6px; left: 6px; width: 20px; height: 20px; border-radius: 4px;
+  background: rgba(0,0,0,0.7); border: 2px solid rgba(255,255,255,0.3); display: none;
+  align-items: center; justify-content: center; font-size: 11px; transition: all 0.1s;
+}
+.select-mode .game-card-checkbox { display: flex; }
+.game-card.selected .game-card-checkbox { background: var(--accent); border-color: var(--accent); color: #111; }
+.game-card-loading { opacity: 0.5; }
+.game-card[draggable="true"] { cursor: grab; }
+.game-card[draggable="true"]:active { cursor: grabbing; }
+.game-card.dragging { opacity: 0.35; transform: scale(0.97); box-shadow: none; }
+
+/* Drag drop targets on sidebar */
+.coll-item.drop-over {
+  background: var(--accent-dim) !important;
+  border-color: var(--accent) !important;
+  box-shadow: inset 0 0 0 2px rgba(240,160,48,0.3);
+}
+.coll-item.drop-over .coll-name { color: var(--accent); }
+.coll-item.drop-over-copy {
+  background: var(--accent2-dim) !important;
+  border-color: var(--accent2) !important;
+  box-shadow: inset 0 0 0 2px rgba(91,138,245,0.3);
+}
+.coll-item.drop-over-copy .coll-name { color: var(--accent2); }
+.coll-drop-badge {
+  font-size: 9px; font-family: 'JetBrains Mono', monospace; font-weight: 700;
+  padding: 1px 5px; border-radius: 3px; letter-spacing: 0.5px; flex-shrink: 0;
+  text-transform: uppercase; pointer-events: none;
+}
+.drop-over .coll-drop-badge { background: var(--accent); color: #111; }
+.drop-over-copy .coll-drop-badge { background: var(--accent2); color: #fff; }
+
+/* Drag hint tooltip */
+#dragHint {
+  position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+  background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px;
+  padding: 8px 16px; font-size: 12px; color: var(--text2); z-index: 400;
+  pointer-events: none; display: none; white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+#dragHint.visible { display: block; }
+#dragHint strong { color: var(--accent); }
+#dragHint .hint-copy { color: var(--accent2); }
+
+.empty-state {
+  grid-column: 1/-1; text-align: center; padding: 60px 20px; color: var(--muted);
+}
+.empty-state-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state-text { font-size: 16px; }
+
+/* ── DETAIL PANEL ── */
+#detail {
+  background: var(--bg2); border-left: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden; min-width: 0;
+}
+.detail-head {
+  padding: 14px 14px 10px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+}
+.detail-head-title { font-family: 'Barlow Condensed', sans-serif; font-size: 17px; font-weight: 700; flex: 1; }
+.detail-scroll { flex: 1; overflow-y: auto; }
+.detail-hero { width: 100%; aspect-ratio: 460/215; object-fit: cover; background: var(--bg3); display: block; }
+.detail-body { padding: 14px; }
+.detail-name { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 700; line-height: 1.2; margin-bottom: 4px; }
+.detail-id { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+.detail-desc { font-size: 12px; color: var(--text2); line-height: 1.6; margin-bottom: 14px; }
+.detail-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.detail-meta-item { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: 8px; }
+.detail-meta-label { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 3px; }
+.detail-meta-value { font-size: 13px; font-weight: 600; color: var(--text); }
+.detail-section-label { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; font-weight: 500; }
+.detail-genres { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 14px; }
+.detail-genre-tag { font-size: 11px; padding: 2px 8px; background: var(--bg3); border: 1px solid var(--border); border-radius: 3px; color: var(--text2); }
+.detail-collections-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+.detail-coll-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r);
+}
+.detail-coll-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.detail-coll-name { flex: 1; font-size: 13px; font-weight: 500; }
+.detail-coll-remove { font-size: 14px; color: var(--muted); background: none; border: none; padding: 2px 4px; transition: color 0.15s; }
+.detail-coll-remove:hover { color: var(--danger); }
+.detail-add-coll { width: 100%; display: flex; gap: 6px; align-items: center; }
+.detail-add-coll select {
+  flex: 1; background: var(--bg3); border: 1px solid var(--border); color: var(--text);
+  padding: 6px 8px; border-radius: var(--r); font-size: 12px; outline: none;
+}
+.detail-add-coll select:focus { border-color: var(--accent2); }
+.detail-footer { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 6px; flex-shrink: 0; }
+.detail-footer .btn { flex: 1; text-align: center; }
+
+/* ── MODAL ── */
+.modal-bg {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.modal {
+  background: var(--bg2); border: 1px solid var(--border2); border-radius: 10px;
+  padding: 24px; min-width: 360px; max-width: 480px; width: 100%;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+}
+.modal-title { font-family: 'Barlow Condensed', sans-serif; font-size: 22px; font-weight: 700; margin-bottom: 16px; }
+.modal-input {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border2); color: var(--text);
+  padding: 10px 12px; border-radius: var(--r); font-size: 14px; outline: none; margin-bottom: 16px;
+}
+.modal-input:focus { border-color: var(--accent2); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modal-sub { font-size: 13px; color: var(--text2); margin-bottom: 16px; }
+
+/* ── TOAST ── */
+.toast-wrap { position: fixed; bottom: 20px; right: 20px; z-index: 300; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toast {
+  background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px;
+  padding: 10px 16px; font-size: 13px; color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  animation: slideIn 0.2s ease; pointer-events: all; min-width: 200px;
+}
+.toast.success { border-color: var(--success); color: var(--success); }
+.toast.error { border-color: var(--danger); color: var(--danger); }
+@keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+/* ── MISC ── */
+.tag-pill { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; display: inline-block; }
+.spinner { border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; width: 16px; height: 16px; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loader">
+  <div class="loader-box">
+    <div class="loader-logo">Valve / Steam</div>
+    <div class="loader-title">Collection Manager</div>
+    <div class="loader-sub">Load your cloud-storage-namespace-1.json to get started</div>
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <span class="drop-icon">🎮</span>
+      <p>Drop <strong>cloud-storage-namespace-1.json</strong> here</p>
+      <p style="font-size:12px; color:var(--muted)">or click to browse</p>
+    </div>
+    <input type="file" id="fileInput" accept=".json" style="display:none">
+    <div class="paste-section">
+      <textarea id="pasteBox" placeholder="Or paste the JSON content here..."></textarea>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button class="btn btn-accent" style="flex:1" onclick="loadPastedJson()">Load Pasted JSON</button>
+        <button class="btn btn-primary" style="flex:1" onclick="loadDemo()">Load Demo (no file)</button>
+      </div>
+    </div>
+    <div class="loader-err" id="loaderErr"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-head">
+      <div class="sidebar-logo">Steam</div>
+      <div class="sidebar-title">Collections</div>
+    </div>
+    <div class="sidebar-actions">
+      <button class="btn btn-sm" onclick="showNewCollectionModal()">＋ New</button>
+      <button class="btn btn-sm" onclick="exportJson()">⬇ Export JSON</button>
+    </div>
+    <div class="collections-list" id="collectionsList"></div>
+    <div class="sidebar-footer">
+      <button class="btn btn-sm" style="width:100%" onclick="fetchAllMetadata()">↓ Fetch All Metadata</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main id="main">
+    <div class="toolbar">
+      <div class="view-title" id="viewTitle">All Games</div>
+      <div class="toolbar-sep"></div>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search games…" oninput="onSearch()">
+      </div>
+      <div class="toolbar-right">
+        <select class="sort-select" id="sortSelect" onchange="renderGames()">
+          <option value="name">Name A→Z</option>
+          <option value="name-desc">Name Z→A</option>
+          <option value="appid">AppID ↑</option>
+          <option value="appid-desc">AppID ↓</option>
+        </select>
+        <button class="btn btn-sm" id="selectModeBtn" onclick="toggleSelectMode()">☑ Select</button>
+        <span class="toolbar-count" id="toolbarCount"></span>
+      </div>
+    </div>
+    <div class="bulk-bar" id="bulkBar">
+      <span class="bulk-bar-label" id="bulkLabel">0 selected</span>
+      <div class="bulk-bar-actions">
+        <button class="btn btn-sm btn-primary" onclick="bulkAddToCollection()">Add to…</button>
+        <button class="btn btn-sm btn-danger" onclick="bulkRemoveFromCollection()">Remove from view</button>
+        <button class="btn btn-sm" onclick="clearSelection()">✕ Deselect</button>
+      </div>
+    </div>
+    <div class="fetch-bar" id="fetchBar">
+      <span style="color:var(--text2); flex-shrink:0" id="fetchStatus">Fetching metadata…</span>
+      <div class="fetch-progress-bg"><div class="fetch-progress-fill" id="fetchFill"></div></div>
+      <button class="btn-icon" onclick="cancelFetch()">✕</button>
+    </div>
+    <div class="games-wrap">
+      <div class="games-grid" id="gamesGrid"></div>
+    </div>
+  </main>
+
+  <!-- Detail Panel -->
+  <aside id="detail" style="display:none">
+    <div class="detail-head">
+      <span class="detail-head-title">Game Details</span>
+      <button class="btn-icon" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="detail-scroll" id="detailScroll"></div>
+    <div class="detail-footer" id="detailFooter"></div>
+  </aside>
+</div>
+
+<!-- MODALS -->
+<div id="modalBg" class="modal-bg" style="display:none" onclick="closeModal(event)">
+  <div class="modal" id="modal" onclick="event.stopPropagation()">
+    <div class="modal-title" id="modalTitle"></div>
+    <div id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+
+<!-- TOASTS -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- DRAG HINT -->
+<div id="dragHint">
+  Drop onto a collection to <strong>MOVE</strong> &nbsp;·&nbsp; Hold <span class="hint-copy">Shift</span> to <span class="hint-copy">COPY</span>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════
+let state = {
+  rawJson: null,
+  collections: {},     // id -> {id, name, added[], removed[], isDynamic, color, timestamp, version}
+  gameCache: {},       // appid -> {name, header_image, short_description, genres[], developers[], metacritic, release_date, is_free, price}
+  activeView: 'all',   // collection id or 'all' or 'uncollected'
+  selectedGame: null,
+  selectedGames: new Set(),
+  selectMode: false,
+  searchQuery: '',
+  fetchQueue: [],
+  fetchActive: false,
+  fetchCancel: false,
+};
+
+// Collection color palette
+const COLORS = [
+  '#f0a030','#5b8af5','#4cc980','#e05555','#a86cf5',
+  '#f55b9a','#30c8f0','#f0d030','#f58030','#60d0a0'
+];
+let colorIdx = 0;
+function nextColor() { return COLORS[colorIdx++ % COLORS.length]; }
+
+// ════════════════════════════════════════════════════════
+// JSON PARSING
+// ════════════════════════════════════════════════════════
+function parseJson(rawData) {
+  let data;
+  try { data = JSON.parse(rawData); } catch(e) { throw new Error('Invalid JSON: ' + e.message); }
+  if (!Array.isArray(data)) throw new Error('Expected an array at root level');
+
+  const collections = {};
+  for (const entry of data) {
+    if (!Array.isArray(entry) || entry.length < 2) continue;
+    const [, obj] = entry;
+    if (!obj || obj.is_deleted) continue;
+    const key = obj.key || '';
+    if (!key.startsWith('user-collections.')) continue;
+
+    let val;
+    try { val = JSON.parse(obj.value); } catch(e) { continue; }
+    if (!val || !val.id) continue;
+
+    const isDynamic = !!(val.filterSpec && val.filterSpec.filterGroups && val.filterSpec.filterGroups.length);
+    collections[val.id] = {
+      id: val.id,
+      name: val.name || val.id,
+      added: Array.isArray(val.added) ? [...val.added] : [],
+      removed: Array.isArray(val.removed) ? [...val.removed] : [],
+      isDynamic,
+      filterSpec: val.filterSpec || null,
+      color: nextColor(),
+      timestamp: obj.timestamp || Math.floor(Date.now()/1000),
+      version: obj.version || '1',
+      conflictResolutionMethod: obj.conflictResolutionMethod || null,
+      strMethodId: obj.strMethodId || null,
+    };
+  }
+  return collections;
+}
+
+function getEffectiveApps(coll) {
+  const removed = new Set(coll.removed);
+  return coll.added.filter(id => !removed.has(id));
+}
+
+function getAllApps() {
+  const all = new Set();
+  for (const coll of Object.values(state.collections)) {
+    if (coll.id === 'hidden') continue;
+    for (const id of getEffectiveApps(coll)) all.add(id);
+  }
+  return [...all];
+}
+
+function getCollectionsForGame(appid) {
+  return Object.values(state.collections).filter(c =>
+    c.added.includes(appid) && !c.removed.includes(appid)
+  );
+}
+
+// ════════════════════════════════════════════════════════
+// STEAM METADATA
+// ════════════════════════════════════════════════════════
+const CACHE_PREFIX = 'steam_meta_';
+
+function loadCachedMeta(appid) {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + appid);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+
+function saveCachedMeta(appid, data) {
+  try { localStorage.setItem(CACHE_PREFIX + appid, JSON.stringify(data)); } catch(e) {}
+}
+
+async function fetchSingleMeta(appid) {
+  const cached = loadCachedMeta(appid);
+  if (cached) { state.gameCache[appid] = cached; return cached; }
+
+  const storeUrl = `https://store.steampowered.com/api/appdetails?appids=${appid}&filters=basic,genres,developers,release_date,metacritic,price_overview`;
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(storeUrl)}`;
+
+  try {
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(20000) });
+    if (res.status === 429 || res.status === 503 || res.status === 502) {
+      return null; // rate limited — caller handles retry, do NOT cache
+    }
+    if (!res.ok) return null;
+    const outer = await res.json();
+    const inner = JSON.parse(outer.contents);
+    const entry = inner[String(appid)];
+    if (!entry || !entry.success) {
+      // App not found on Steam Store — cache so we don't keep retrying
+      const fallback = { appid, name: null, header_image: null, failed: true };
+      saveCachedMeta(appid, fallback);
+      state.gameCache[appid] = fallback;
+      return fallback;
+    }
+    const d = entry.data;
+    const meta = {
+      appid,
+      name: d.name,
+      header_image: d.header_image || `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`,
+      short_description: d.short_description || '',
+      genres: (d.genres || []).map(g => g.description),
+      developers: d.developers || [],
+      publishers: d.publishers || [],
+      metacritic: d.metacritic?.score || null,
+      release_date: d.release_date?.date || null,
+      is_free: d.is_free || false,
+      price: d.price_overview?.final_formatted || (d.is_free ? 'Free' : null),
+    };
+    saveCachedMeta(appid, meta);
+    state.gameCache[appid] = meta;
+    return meta;
+  } catch(e) {
+    return null; // network error — do NOT cache, allow retry on next scroll
+  }
+}
+
+async function fetchAllMetadata() {
+  const allApps = getAllApps();
+  const toFetch = allApps.filter(id => !state.gameCache[id] || state.gameCache[id].failed);
+  if (toFetch.length === 0) { showToast('All metadata already cached!', 'success'); return; }
+
+  state.fetchCancel = false;
+  state.fetchActive = true;
+  document.getElementById('fetchBar').classList.add('visible');
+
+  let done = 0;
+  for (const appid of toFetch) {
+    if (state.fetchCancel) break;
+    document.getElementById('fetchStatus').textContent = `Fetching metadata… ${done}/${toFetch.length}`;
+    document.getElementById('fetchFill').style.width = (done/toFetch.length*100) + '%';
+    const result = await fetchSingleMeta(appid);
+    if (result === null) {
+      // Rate limited — back off and retry once
+      await new Promise(r => setTimeout(r, 3000));
+      const retry = await fetchSingleMeta(appid);
+      if (!retry) continue; // skip if still failing
+    }
+    done++;
+    const card = document.querySelector(`[data-appid="${appid}"]`);
+    if (card) refreshCard(card, appid);
+    await new Promise(r => setTimeout(r, 400));
+  }
+
+  state.fetchActive = false;
+  document.getElementById('fetchBar').classList.remove('visible');
+  document.getElementById('fetchFill').style.width = '0%';
+  renderGames();
+  showToast(`Fetched metadata for ${done} games`, 'success');
+}
+
+function cancelFetch() {
+  state.fetchCancel = true;
+  state.fetchActive = false;
+  document.getElementById('fetchBar').classList.remove('visible');
+}
+
+// ── VIEWPORT-BASED LAZY FETCH ──────────────────────────────
+// Only fetches metadata for cards that scroll into view.
+// A single serial worker drains the queue to respect rate limits.
+
+let _viewObserver = null;
+const _fetchQueue = [];          // ordered list of appids to fetch
+const _queued = new Set();       // guard against duplicates in the queue
+let _workerRunning = false;
+
+function setupViewportObserver() {
+  if (_viewObserver) { _viewObserver.disconnect(); _viewObserver = null; }
+  // Clear queue when switching views so stale off-screen cards don't get priority
+  _fetchQueue.length = 0;
+  _queued.clear();
+
+  const scrollRoot = document.querySelector('.games-wrap');
+  _viewObserver = new IntersectionObserver(entries => {
+    let added = false;
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const appid = parseInt(entry.target.dataset.appid);
+      if (state.gameCache[appid] || _queued.has(appid)) continue;
+      _fetchQueue.push(appid);
+      _queued.add(appid);
+      _viewObserver.unobserve(entry.target); // one-shot per card
+      added = true;
+    }
+    if (added) startFetchWorker();
+  }, { root: scrollRoot, rootMargin: '200px 0px', threshold: 0 });
+
+  document.querySelectorAll('#gamesGrid .game-card[data-appid]').forEach(card => {
+    const appid = parseInt(card.dataset.appid);
+    if (!state.gameCache[appid]) _viewObserver.observe(card);
+  });
+}
+
+async function startFetchWorker() {
+  if (_workerRunning) return;
+  _workerRunning = true;
+  while (_fetchQueue.length > 0) {
+    const appid = _fetchQueue.shift();
+    if (state.gameCache[appid]) continue; // arrived via cache since queuing
+    const result = await fetchSingleMeta(appid);
+    if (result === null) {
+      // Rate limited — pause and re-queue at front for next attempt
+      _fetchQueue.unshift(appid);
+      _queued.add(appid); // keep in set so we don't double-add from observer
+      await new Promise(r => setTimeout(r, 3000));
+      continue;
+    }
+    const card = document.querySelector(`[data-appid="${appid}"]`);
+    if (card) refreshCard(card, appid);
+    await new Promise(r => setTimeout(r, 400));
+  }
+  _workerRunning = false;
+}
+
+function refreshCard(card, appid) {
+  const meta = state.gameCache[appid];
+  if (!meta || meta.failed) return;
+
+  const img = card.querySelector('.game-card-thumb');
+  if (img && meta.header_image && img.src !== meta.header_image) {
+    img.src = meta.header_image;
+    img.style.display = 'block';
+  }
+  const nameEl = card.querySelector('.game-card-name');
+  if (nameEl && meta.name) {
+    nameEl.textContent = meta.name;
+    nameEl.style.color = '';
+    nameEl.style.fontStyle = '';
+    nameEl.style.fontWeight = '';
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// RENDERING — SIDEBAR
+// ════════════════════════════════════════════════════════
+function renderSidebar() {
+  const container = document.getElementById('collectionsList');
+  let html = '';
+
+  // Special views
+  const allCount = getAllApps().length;
+  html += `<div class="coll-group-label">Library</div>`;
+  html += collItemHtml('all', '📚', 'All Games', allCount, state.activeView === 'all');
+
+  // User collections
+  const userColls = Object.values(state.collections).filter(c => c.id !== 'hidden' && !c.isDynamic);
+  const smartColls = Object.values(state.collections).filter(c => c.isDynamic);
+  const hiddenColl = state.collections['hidden'];
+
+  if (userColls.length) {
+    html += `<div class="coll-group-label">Collections</div>`;
+    for (const c of userColls.sort((a,b) => a.name.localeCompare(b.name))) {
+      html += collItemHtml(c.id, null, c.name, getEffectiveApps(c).length, state.activeView === c.id, c.color, false);
+    }
+  }
+  if (smartColls.length) {
+    html += `<div class="coll-group-label">Smart</div>`;
+    for (const c of smartColls) {
+      html += collItemHtml(c.id, '⚙', c.name, getEffectiveApps(c).length, state.activeView === c.id, '#5b8af5', true);
+    }
+  }
+  if (hiddenColl) {
+    html += `<div class="coll-group-label">System</div>`;
+    html += collItemHtml('hidden', '🚫', 'Hidden', getEffectiveApps(hiddenColl).length, state.activeView === 'hidden', '#e05555', true);
+  }
+
+  container.innerHTML = html;
+
+  container.querySelectorAll('.coll-item').forEach(el => {
+    el.addEventListener('click', () => setView(el.dataset.id));
+  });
+  container.querySelectorAll('.coll-edit-btn').forEach(el => {
+    el.addEventListener('click', e => { e.stopPropagation(); showRenameModal(el.dataset.id); });
+  });
+  container.querySelectorAll('.coll-del-btn').forEach(el => {
+    el.addEventListener('click', e => { e.stopPropagation(); confirmDeleteCollection(el.dataset.id); });
+  });
+
+  // ── DRAG DROP: collection items as drop targets ──
+  container.querySelectorAll('.coll-item').forEach(el => {
+    const targetId = el.dataset.id;
+    // Only allow drop onto real editable collections (not 'all', not smart)
+    const coll = state.collections[targetId];
+    if (!coll || coll.isDynamic) return;
+
+    el.addEventListener('dragover', e => {
+      if (!state._draggingIds) return;
+      e.preventDefault();
+      const isCopy = e.shiftKey;
+      e.dataTransfer.dropEffect = isCopy ? 'copy' : 'move';
+
+      // Toggle classes based on shift key
+      if (isCopy) {
+        el.classList.add('drop-over-copy');
+        el.classList.remove('drop-over');
+      } else {
+        el.classList.add('drop-over');
+        el.classList.remove('drop-over-copy');
+      }
+
+      // Show/update badge
+      let badge = el.querySelector('.coll-drop-badge');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'coll-drop-badge';
+        // Insert before coll-item-actions or at end
+        const actions = el.querySelector('.coll-item-actions');
+        if (actions) el.insertBefore(badge, actions);
+        else el.appendChild(badge);
+      }
+      badge.textContent = isCopy ? 'COPY' : 'MOVE';
+      // Also hide count while badge is showing
+      const countEl = el.querySelector('.coll-count');
+      if (countEl) countEl.style.display = 'none';
+    });
+
+    el.addEventListener('dragleave', e => {
+      // Only clear if leaving the item entirely (not entering a child)
+      if (el.contains(e.relatedTarget)) return;
+      el.classList.remove('drop-over', 'drop-over-copy');
+      const badge = el.querySelector('.coll-drop-badge');
+      if (badge) badge.remove();
+      const countEl = el.querySelector('.coll-count');
+      if (countEl) countEl.style.display = '';
+    });
+
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.classList.remove('drop-over', 'drop-over-copy');
+      const badge = el.querySelector('.coll-drop-badge');
+      if (badge) badge.remove();
+      const countEl = el.querySelector('.coll-count');
+      if (countEl) countEl.style.display = '';
+
+      let ids;
+      try { ids = JSON.parse(e.dataTransfer.getData('text/plain')); }
+      catch { return; }
+      if (!ids?.length) return;
+
+      const isCopy = e.shiftKey;
+
+      if (isCopy) {
+        // COPY: add to target, keep in all current collections
+        ids.forEach(appid => addGameToCollection(appid, targetId));
+        const n = ids.length;
+        const name = state.gameCache[ids[0]]?.name || `App ${ids[0]}`;
+        showToast(`Copied ${n === 1 ? name : n + ' games'} to ${coll.name}`, 'success');
+      } else {
+        // MOVE: remove from ALL other user collections, add to target
+        ids.forEach(appid => {
+          // Remove from every non-target editable collection that contains this game
+          Object.values(state.collections).forEach(c => {
+            if (c.id !== targetId && !c.isDynamic && c.added.includes(appid) && !c.removed.includes(appid)) {
+              c.added = c.added.filter(id => id !== appid);
+              c.timestamp = Math.floor(Date.now()/1000);
+            }
+          });
+          addGameToCollection(appid, targetId);
+        });
+        const n = ids.length;
+        const name = state.gameCache[ids[0]]?.name || `App ${ids[0]}`;
+        showToast(`Moved ${n === 1 ? name : n + ' games'} to ${coll.name}`, 'success');
+      }
+
+      renderSidebar();
+      renderGames();
+      if (state.selectedGame && ids.includes(state.selectedGame)) renderDetail(state.selectedGame);
+    });
+  });
+}
+
+function collItemHtml(id, icon, name, count, active, color, isSmart) {
+  const dotStyle = color ? `background:${color}` : 'background:var(--muted)';
+  const iconHtml = icon ? `<span>${icon}</span>` : `<span class="coll-dot" style="${dotStyle}"></span>`;
+  const activeClass = active ? ' active' : '';
+  const smartBadge = isSmart ? `<span class="coll-smart">⚙</span>` : '';
+  const isEditable = id !== 'all' && id !== 'hidden' && !isSmart;
+  const actionsHtml = isEditable ? `
+    <div class="coll-item-actions">
+      <button class="btn-icon coll-edit-btn" data-id="${id}" title="Rename">✏</button>
+      <button class="btn-icon coll-del-btn" data-id="${id}" title="Delete" style="color:var(--danger)">🗑</button>
+    </div>
+  ` : '';
+
+  return `
+    <div class="coll-item${activeClass}" data-id="${id}">
+      ${iconHtml}
+      <span class="coll-name">${escHtml(name)}${smartBadge}</span>
+      <span class="coll-count">${count}</span>
+      ${actionsHtml}
+    </div>
+  `;
+}
+
+// ════════════════════════════════════════════════════════
+// RENDERING — GAMES GRID
+// ════════════════════════════════════════════════════════
+function getCurrentViewAppids() {
+  let appids;
+  if (state.activeView === 'all') {
+    appids = getAllApps();
+  } else if (state.collections[state.activeView]) {
+    appids = getEffectiveApps(state.collections[state.activeView]);
+  } else {
+    appids = getAllApps();
+  }
+  return appids;
+}
+
+function renderGames() {
+  let appids = getCurrentViewAppids();
+
+  // Search
+  if (state.searchQuery) {
+    const q = state.searchQuery.toLowerCase();
+    appids = appids.filter(id => {
+      const meta = state.gameCache[id];
+      if (!meta) return String(id).includes(q);
+      return meta.name?.toLowerCase().includes(q) || String(id).includes(q);
+    });
+  }
+
+  // Sort
+  const sort = document.getElementById('sortSelect').value;
+  appids = [...appids];
+  if (sort === 'name') appids.sort((a,b) => (state.gameCache[a]?.name||`App ${a}`).localeCompare(state.gameCache[b]?.name||`App ${b}`));
+  else if (sort === 'name-desc') appids.sort((a,b) => (state.gameCache[b]?.name||`App ${b}`).localeCompare(state.gameCache[a]?.name||`App ${a}`));
+  else if (sort === 'appid') appids.sort((a,b) => a-b);
+  else if (sort === 'appid-desc') appids.sort((a,b) => b-a);
+
+  // Count
+  document.getElementById('toolbarCount').textContent = `${appids.length} game${appids.length !== 1 ? 's' : ''}`;
+
+  const grid = document.getElementById('gamesGrid');
+  grid.className = 'games-grid' + (state.selectMode ? ' select-mode' : '');
+
+  if (appids.length === 0) {
+    grid.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🎮</div><div class="empty-state-text">No games here yet.</div></div>`;
+    return;
+  }
+
+  grid.innerHTML = appids.map(id => gameCardHtml(id)).join('');
+
+  // Wire events
+  grid.querySelectorAll('.game-card').forEach(card => {
+    const id = parseInt(card.dataset.appid);
+
+    card.addEventListener('click', () => {
+      if (state.selectMode) { toggleSelectGame(id, card); }
+      else { openDetail(id); }
+    });
+
+    card.addEventListener('dragstart', e => {
+      // If in select mode and this card is selected, drag all selected; else drag just this card
+      const ids = (state.selectMode && state.selectedGames.has(id) && state.selectedGames.size > 1)
+        ? [...state.selectedGames]
+        : [id];
+      e.dataTransfer.setData('text/plain', JSON.stringify(ids));
+      e.dataTransfer.effectAllowed = 'copyMove';
+      // Visual: mark dragging cards
+      ids.forEach(aid => {
+        const c = grid.querySelector(`[data-appid="${aid}"]`);
+        if (c) c.classList.add('dragging');
+      });
+      // Build a drag ghost showing count
+      const ghost = document.createElement('div');
+      ghost.style.cssText = `position:fixed;top:-100px;left:-100px;background:var(--bg2);border:1px solid var(--accent);border-radius:6px;padding:6px 12px;color:var(--text);font-size:12px;font-family:'Barlow',sans-serif;white-space:nowrap;`;
+      const meta = state.gameCache[id];
+      ghost.textContent = ids.length > 1 ? `${ids.length} games` : (meta?.name || `App ${id}`);
+      document.body.appendChild(ghost);
+      e.dataTransfer.setDragImage(ghost, 0, 0);
+      setTimeout(() => ghost.remove(), 0);
+      // Show hint
+      document.getElementById('dragHint').classList.add('visible');
+      state._draggingIds = ids;
+    });
+
+    card.addEventListener('dragend', () => {
+      grid.querySelectorAll('.game-card.dragging').forEach(c => c.classList.remove('dragging'));
+      document.getElementById('dragHint').classList.remove('visible');
+      // Clear any lingering drop highlights on sidebar
+      document.querySelectorAll('.coll-item.drop-over, .coll-item.drop-over-copy').forEach(el => {
+        el.classList.remove('drop-over', 'drop-over-copy');
+        const badge = el.querySelector('.coll-drop-badge');
+        if (badge) badge.remove();
+      });
+      state._draggingIds = null;
+    });
+  });
+  // Attach viewport observer AFTER cards are in DOM
+  setupViewportObserver();
+}
+
+function gameCardHtml(appid) {
+  const meta = state.gameCache[appid];
+  const name = meta?.name || null;
+  const isSelected = state.selectedGames.has(appid);
+  const isActive = state.selectedGame === appid;
+
+  const imgSrc = (meta && meta.header_image)
+    ? meta.header_image
+    : `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`;
+  const imgHtml = `<img class="game-card-thumb" src="${imgSrc}" alt="${escHtml(name || String(appid))}" loading="lazy" onerror="this.parentNode.innerHTML='<div class=\\'game-card-thumb-placeholder\\'>🎮</div>'">`;
+
+  // Collection tags (max 2 visible)
+  const colls = getCollectionsForGame(appid).filter(c => c.id !== 'hidden' && c.id !== state.activeView);
+  const tagHtml = colls.slice(0, 2).map(c =>
+    `<span class="game-card-tag" style="background:${c.color}22;color:${c.color};border:1px solid ${c.color}44">${escHtml(c.name.slice(0,12))}</span>`
+  ).join('') + (colls.length > 2 ? `<span class="game-card-tag" style="background:var(--bg3);color:var(--muted)">+${colls.length-2}</span>` : '');
+
+  const nameHtml = name
+    ? `<div class="game-card-name">${escHtml(name)}</div>`
+    : `<div class="game-card-name" style="color:var(--muted);font-style:italic;font-weight:400">Loading…</div>`;
+
+  return `
+    <div class="game-card${isSelected ? ' selected' : ''}${isActive ? ' active' : ''}" data-appid="${appid}" draggable="true">
+      <div class="game-card-checkbox">${isSelected ? '✓' : ''}</div>
+      ${imgHtml}
+      <div class="game-card-body">
+        ${nameHtml}
+        <div class="game-card-id">#${appid}</div>
+        ${tagHtml ? `<div class="game-card-tags">${tagHtml}</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+// ════════════════════════════════════════════════════════
+// DETAIL PANEL
+// ════════════════════════════════════════════════════════
+async function openDetail(appid) {
+  state.selectedGame = appid;
+  document.getElementById('detail').style.display = 'flex';
+  document.getElementById('app').classList.add('detail-open');
+  renderDetail(appid);
+  renderGames(); // update active state on card
+
+  // Fetch meta if needed
+  if (!state.gameCache[appid] || state.gameCache[appid].failed) {
+    await fetchSingleMeta(appid);
+    if (state.selectedGame === appid) renderDetail(appid);
+  }
+}
+
+function closeDetail() {
+  state.selectedGame = null;
+  document.getElementById('detail').style.display = 'none';
+  document.getElementById('app').classList.remove('detail-open');
+  renderGames();
+}
+
+function renderDetail(appid) {
+  const meta = state.gameCache[appid];
+  const name = meta?.name || `App ${appid}`;
+  const scroll = document.getElementById('detailScroll');
+  const footer = document.getElementById('detailFooter');
+
+  const imgSrc = meta?.header_image || `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`;
+  const colls = getCollectionsForGame(appid);
+
+  // Metacritic badge
+  const metaBadge = meta?.metacritic
+    ? `<div class="detail-meta-item"><div class="detail-meta-label">Metacritic</div><div class="detail-meta-value" style="color:${meta.metacritic >= 75 ? 'var(--success)' : meta.metacritic >= 50 ? 'var(--warn)' : 'var(--danger)'}">${meta.metacritic}</div></div>`
+    : '';
+
+  const collListHtml = colls.map(c => `
+    <div class="detail-coll-row">
+      <span class="detail-coll-dot" style="background:${c.color}"></span>
+      <span class="detail-coll-name">${escHtml(c.name)}</span>
+      <button class="detail-coll-remove" onclick="removeFromCollection(${appid},'${c.id}')" title="Remove from ${escHtml(c.name)}">✕</button>
+    </div>
+  `).join('') || `<div style="color:var(--muted);font-size:12px;">Not in any collection</div>`;
+
+  // Build add-to dropdown (collections this game is NOT in)
+  const notIn = Object.values(state.collections).filter(c => !c.isDynamic && !c.added.includes(appid) || c.removed.includes(appid));
+  const addOptions = notIn.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+
+  scroll.innerHTML = `
+    <img class="detail-hero" src="${imgSrc}" alt="${escHtml(name)}" onerror="this.style.display='none'">
+    <div class="detail-body">
+      <div class="detail-name">${escHtml(name)}</div>
+      <div class="detail-id">AppID: ${appid}</div>
+      ${meta?.short_description ? `<div class="detail-desc">${escHtml(meta.short_description)}</div>` : ''}
+      <div class="detail-meta-grid">
+        ${meta?.release_date ? `<div class="detail-meta-item"><div class="detail-meta-label">Released</div><div class="detail-meta-value">${escHtml(meta.release_date)}</div></div>` : ''}
+        ${meta?.price ? `<div class="detail-meta-item"><div class="detail-meta-label">Price</div><div class="detail-meta-value">${escHtml(meta.price)}</div></div>` : ''}
+        ${metaBadge}
+        ${meta?.developers?.length ? `<div class="detail-meta-item"><div class="detail-meta-label">Developer</div><div class="detail-meta-value" style="font-size:11px">${escHtml(meta.developers.join(', '))}</div></div>` : ''}
+      </div>
+      ${meta?.genres?.length ? `
+        <div class="detail-section-label">Genres</div>
+        <div class="detail-genres">
+          ${meta.genres.map(g => `<span class="detail-genre-tag">${escHtml(g)}</span>`).join('')}
+        </div>
+      ` : ''}
+      <div class="detail-section-label">Collections (${colls.length})</div>
+      <div class="detail-collections-list">${collListHtml}</div>
+      ${addOptions ? `
+        <div class="detail-section-label">Add to Collection</div>
+        <div class="detail-add-coll">
+          <select id="addCollSelect">
+            <option value="">— choose collection —</option>
+            ${addOptions}
+          </select>
+          <button class="btn btn-sm btn-primary" onclick="addGameFromDetail(${appid})">Add</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  footer.innerHTML = `
+    <a href="https://store.steampowered.com/app/${appid}" target="_blank" class="btn btn-sm">🔗 Steam Store</a>
+    ${state.activeView !== 'all' && state.collections[state.activeView]?.added.includes(appid)
+      ? `<button class="btn btn-sm btn-danger" onclick="removeFromCollection(${appid},'${state.activeView}');closeDetail()">Remove from View</button>`
+      : ''}
+  `;
+}
+
+function addGameFromDetail(appid) {
+  const sel = document.getElementById('addCollSelect');
+  if (!sel || !sel.value) return;
+  addGameToCollection(appid, sel.value);
+  renderDetail(appid);
+}
+
+// ════════════════════════════════════════════════════════
+// COLLECTION OPERATIONS
+// ════════════════════════════════════════════════════════
+function addGameToCollection(appid, collId) {
+  const coll = state.collections[collId];
+  if (!coll) return;
+  if (!coll.added.includes(appid)) coll.added.push(appid);
+  coll.removed = coll.removed.filter(id => id !== appid); // un-remove
+  coll.timestamp = Math.floor(Date.now()/1000);
+  renderSidebar();
+  renderGames();
+  showToast(`Added to ${coll.name}`, 'success');
+}
+
+function removeFromCollection(appid, collId) {
+  const coll = state.collections[collId];
+  if (!coll) return;
+  coll.added = coll.added.filter(id => id !== appid);
+  coll.timestamp = Math.floor(Date.now()/1000);
+  renderSidebar();
+  renderGames();
+  if (state.selectedGame === appid) renderDetail(appid);
+  showToast(`Removed from ${coll.name}`);
+}
+
+function createCollection(name) {
+  const id = 'uc-' + Math.random().toString(36).slice(2, 10);
+  state.collections[id] = {
+    id, name,
+    added: [], removed: [],
+    isDynamic: false, filterSpec: null,
+    color: nextColor(),
+    timestamp: Math.floor(Date.now()/1000),
+    version: '1',
+    conflictResolutionMethod: 'custom',
+    strMethodId: 'union-collections',
+    isNew: true,
+  };
+  renderSidebar();
+  setView(id);
+  showToast(`Collection "${name}" created`, 'success');
+  return id;
+}
+
+function renameCollection(id, newName) {
+  const coll = state.collections[id];
+  if (!coll) return;
+  coll.name = newName;
+  coll.timestamp = Math.floor(Date.now()/1000);
+  renderSidebar();
+  if (state.activeView === id) document.getElementById('viewTitle').textContent = newName;
+  showToast(`Renamed to "${newName}"`, 'success');
+}
+
+function deleteCollection(id) {
+  delete state.collections[id];
+  if (state.activeView === id) setView('all');
+  renderSidebar();
+  showToast('Collection deleted');
+}
+
+// ════════════════════════════════════════════════════════
+// VIEW MANAGEMENT
+// ════════════════════════════════════════════════════════
+function setView(id) {
+  state.activeView = id;
+  state.searchQuery = '';
+  document.getElementById('searchInput').value = '';
+  state.selectedGames.clear();
+  exitSelectMode();
+
+  let title = 'All Games';
+  if (id !== 'all' && state.collections[id]) title = state.collections[id].name;
+  document.getElementById('viewTitle').textContent = title;
+
+  renderSidebar();
+  renderGames();
+}
+
+function onSearch() {
+  state.searchQuery = document.getElementById('searchInput').value.trim();
+  renderGames();
+}
+
+// ════════════════════════════════════════════════════════
+// SELECT MODE & BULK OPS
+// ════════════════════════════════════════════════════════
+function toggleSelectMode() {
+  if (state.selectMode) exitSelectMode();
+  else enterSelectMode();
+}
+
+function enterSelectMode() {
+  state.selectMode = true;
+  document.getElementById('selectModeBtn').textContent = '✕ Cancel Select';
+  document.getElementById('selectModeBtn').classList.add('btn-accent');
+  renderGames();
+}
+
+function exitSelectMode() {
+  state.selectMode = false;
+  state.selectedGames.clear();
+  document.getElementById('selectModeBtn').textContent = '☑ Select';
+  document.getElementById('selectModeBtn').classList.remove('btn-accent');
+  document.getElementById('bulkBar').classList.remove('active');
+  renderGames();
+}
+
+function toggleSelectGame(appid, card) {
+  if (state.selectedGames.has(appid)) {
+    state.selectedGames.delete(appid);
+    card.classList.remove('selected');
+    card.querySelector('.game-card-checkbox').textContent = '';
+  } else {
+    state.selectedGames.add(appid);
+    card.classList.add('selected');
+    card.querySelector('.game-card-checkbox').textContent = '✓';
+  }
+  const n = state.selectedGames.size;
+  const bar = document.getElementById('bulkBar');
+  document.getElementById('bulkLabel').textContent = `${n} selected`;
+  if (n > 0) bar.classList.add('active'); else bar.classList.remove('active');
+}
+
+function clearSelection() {
+  exitSelectMode();
+}
+
+function bulkAddToCollection() {
+  if (!state.selectedGames.size) return;
+  showBulkMoveModal([...state.selectedGames], false);
+}
+
+function bulkRemoveFromCollection() {
+  if (!state.selectedGames.size || state.activeView === 'all') {
+    showToast('Select a collection view to remove from', 'error'); return;
+  }
+  const ids = [...state.selectedGames];
+  ids.forEach(id => removeFromCollection(id, state.activeView));
+  exitSelectMode();
+  showToast(`Removed ${ids.length} games`, 'success');
+}
+
+function showBulkMoveModal(appids, isMove) {
+  const options = Object.values(state.collections)
+    .filter(c => !c.isDynamic)
+    .map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`)
+    .join('');
+
+  document.getElementById('modalTitle').textContent = `${isMove ? 'Move' : 'Add'} ${appids.length} games to…`;
+  document.getElementById('modalBody').innerHTML = `
+    <select class="modal-input" id="bulkTargetColl">
+      <option value="">— select collection —</option>
+      ${options}
+    </select>
+  `;
+  document.getElementById('modalActions').innerHTML = `
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-accent" onclick="confirmBulkMove(${JSON.stringify(appids)}, ${isMove})">Confirm</button>
+  `;
+  document.getElementById('modalBg').style.display = 'flex';
+}
+
+function confirmBulkMove(appids, isMove) {
+  const targetId = document.getElementById('bulkTargetColl').value;
+  if (!targetId) return;
+  if (isMove && state.collections[state.activeView]) {
+    appids.forEach(id => removeFromCollection(id, state.activeView));
+  }
+  appids.forEach(id => addGameToCollection(id, targetId));
+  closeModal();
+  exitSelectMode();
+}
+
+// ════════════════════════════════════════════════════════
+// MODALS
+// ════════════════════════════════════════════════════════
+function showNewCollectionModal() {
+  document.getElementById('modalTitle').textContent = 'New Collection';
+  document.getElementById('modalBody').innerHTML = `
+    <input class="modal-input" id="newCollName" placeholder="Collection name…" autofocus>
+  `;
+  document.getElementById('modalActions').innerHTML = `
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-accent" onclick="confirmNewCollection()">Create</button>
+  `;
+  document.getElementById('modalBg').style.display = 'flex';
+  setTimeout(() => document.getElementById('newCollName')?.focus(), 50);
+}
+
+function confirmNewCollection() {
+  const name = document.getElementById('newCollName').value.trim();
+  if (!name) return;
+  closeModal();
+  createCollection(name);
+}
+
+function showRenameModal(id) {
+  const coll = state.collections[id];
+  if (!coll) return;
+  document.getElementById('modalTitle').textContent = 'Rename Collection';
+  document.getElementById('modalBody').innerHTML = `
+    <input class="modal-input" id="renameInput" value="${escHtml(coll.name)}" placeholder="New name…">
+  `;
+  document.getElementById('modalActions').innerHTML = `
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-accent" onclick="confirmRename('${id}')">Save</button>
+  `;
+  document.getElementById('modalBg').style.display = 'flex';
+  setTimeout(() => { const el = document.getElementById('renameInput'); if(el){el.focus();el.select();} }, 50);
+}
+
+function confirmRename(id) {
+  const name = document.getElementById('renameInput').value.trim();
+  if (!name) return;
+  closeModal();
+  renameCollection(id, name);
+}
+
+function confirmDeleteCollection(id) {
+  const coll = state.collections[id];
+  if (!coll) return;
+  document.getElementById('modalTitle').textContent = 'Delete Collection';
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-sub">Are you sure you want to delete <strong>${escHtml(coll.name)}</strong>? Games won't be affected.</div>
+  `;
+  document.getElementById('modalActions').innerHTML = `
+    <button class="btn" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-danger" onclick="closeModal();deleteCollection('${id}')">Delete</button>
+  `;
+  document.getElementById('modalBg').style.display = 'flex';
+}
+
+function closeModal(event) {
+  if (event && event.target !== document.getElementById('modalBg')) return;
+  document.getElementById('modalBg').style.display = 'none';
+}
+
+// ════════════════════════════════════════════════════════
+// EXPORT JSON
+// ════════════════════════════════════════════════════════
+function exportJson() {
+  if (!state.rawJson) return;
+  const raw = JSON.parse(state.rawJson);
+
+  // Build a map of collection id -> updated entry
+  const collMap = {};
+  for (const coll of Object.values(state.collections)) {
+    collMap[coll.id] = coll;
+  }
+
+  const output = [];
+  const touchedIds = new Set();
+
+  for (const entry of raw) {
+    if (!Array.isArray(entry)) { output.push(entry); continue; }
+    const [, obj] = entry;
+    const key = obj?.key || '';
+
+    if (!key.startsWith('user-collections.')) {
+      output.push(entry); continue;
+    }
+
+    // Try to match to a collection
+    let matched = null;
+    for (const coll of Object.values(state.collections)) {
+      // Match by key suffix (after 'user-collections.')
+      const keySuffix = key.replace('user-collections.', '');
+      if (coll.id === keySuffix || ('user-collections.' + coll.id) === key) {
+        matched = coll;
+        break;
+      }
+    }
+
+    if (obj.is_deleted) {
+      output.push(entry); continue;
+    }
+
+    if (matched) {
+      touchedIds.add(matched.id);
+      const newVal = {
+        id: matched.id,
+        name: matched.name,
+        added: matched.added,
+        removed: matched.removed,
+      };
+      if (matched.filterSpec) newVal.filterSpec = matched.filterSpec;
+      const newVersion = String((parseInt(obj.version || '1') || 1) + 1);
+      const newObj = {
+        ...obj,
+        timestamp: Math.floor(Date.now()/1000),
+        value: JSON.stringify(newVal),
+        version: newVersion,
+      };
+      if (matched.conflictResolutionMethod) newObj.conflictResolutionMethod = matched.conflictResolutionMethod;
+      if (matched.strMethodId) newObj.strMethodId = matched.strMethodId;
+      output.push([key, newObj]);
+    } else {
+      output.push(entry);
+    }
+  }
+
+  // Add newly created collections (not in original JSON)
+  for (const coll of Object.values(state.collections)) {
+    if (!touchedIds.has(coll.id) && coll.isNew) {
+      const key = 'user-collections.' + coll.id;
+      const val = { id: coll.id, name: coll.name, added: coll.added, removed: coll.removed };
+      output.push([key, {
+        key,
+        timestamp: coll.timestamp,
+        value: JSON.stringify(val),
+        version: '1',
+        conflictResolutionMethod: 'custom',
+        strMethodId: 'union-collections',
+      }]);
+    }
+  }
+
+  const blob = new Blob([JSON.stringify(output)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'cloud-storage-namespace-1.json';
+  a.click();
+  showToast('JSON exported!', 'success');
+}
+
+// ════════════════════════════════════════════════════════
+// INIT & LOAD
+// ════════════════════════════════════════════════════════
+function initApp(rawJson) {
+  state.rawJson = rawJson;
+  state.collections = parseJson(rawJson);
+
+  // Load cached metadata
+  for (const appid of getAllApps()) {
+    const cached = loadCachedMeta(appid);
+    if (cached) state.gameCache[appid] = cached;
+  }
+
+  document.getElementById('loader').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+
+  renderSidebar();
+  setView('all');
+}
+
+function loadFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try { initApp(e.target.result); }
+    catch(err) { document.getElementById('loaderErr').textContent = err.message; }
+  };
+  reader.readAsText(file);
+}
+
+function loadPastedJson() {
+  const text = document.getElementById('pasteBox').value.trim();
+  if (!text) { document.getElementById('loaderErr').textContent = 'Paste your JSON first'; return; }
+  try { initApp(text); }
+  catch(err) { document.getElementById('loaderErr').textContent = err.message; }
+}
+
+function loadDemo() {
+  // Build minimal demo structure
+  const demoColls = [
+    { id: 'favorite', name: 'Favorites', added: [730,570,440,1091500], removed: [] },
+    { id: 'uc-demo1', name: 'Backlog', added: [1203220,1145360,230230,1057090,292030], removed: [] },
+    { id: 'uc-demo2', name: 'Finished', added: [107410,620,359550,374320], removed: [] },
+  ];
+  const raw = demoColls.map(c => [
+    'user-collections.' + c.id,
+    { key: 'user-collections.' + c.id, timestamp: Math.floor(Date.now()/1000), value: JSON.stringify(c), version: '1' }
+  ]);
+  initApp(JSON.stringify(raw));
+}
+
+// ════════════════════════════════════════════════════════
+// UTIL
+// ════════════════════════════════════════════════════════
+function escHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, type='') {
+  const wrap = document.getElementById('toastWrap');
+  const toast = document.createElement('div');
+  toast.className = 'toast' + (type ? ' '+type : '');
+  toast.textContent = msg;
+  wrap.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// ════════════════════════════════════════════════════════
+// EVENT LISTENERS
+// ════════════════════════════════════════════════════════
+document.getElementById('fileInput').addEventListener('change', e => loadFile(e.target.files[0]));
+
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('drag-over');
+  loadFile(e.dataTransfer.files[0]);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeModal();
+    if (state.selectMode) exitSelectMode();
+    else if (state.selectedGame) closeDetail();
+  }
+});
+</script>
+</body>
+</html>
