@@ -586,21 +586,37 @@ const PROXIES = [
 const _proxyThrottle = {}; // name -> unthrottledAtMs
 let _proxyIndex = 0;
 
-function getNextProxy() {
+function getCurrentProxy() {
   const now = Date.now();
-  // Try proxies round-robin, skipping throttled ones
-  for (let i = 0; i < PROXIES.length; i++) {
+
+  // If current proxy is still usable, keep using it.
+  const current = PROXIES[_proxyIndex];
+  if (!_proxyThrottle[current.name] || now >= _proxyThrottle[current.name]) {
+    return current;
+  }
+
+  // Current proxy failed/throttled, so move to next available one.
+  for (let i = 1; i < PROXIES.length; i++) {
     const idx = (_proxyIndex + i) % PROXIES.length;
     const p = PROXIES[idx];
     if (!_proxyThrottle[p.name] || now >= _proxyThrottle[p.name]) {
-      _proxyIndex = (idx + 1) % PROXIES.length; // advance for next call
+      _proxyIndex = idx;
       return p;
     }
   }
-  // All throttled — return least-throttled one anyway
-  return PROXIES.reduce((a, b) =>
-    (_proxyThrottle[a.name] || 0) < (_proxyThrottle[b.name] || 0) ? a : b
-  );
+
+  // Everything is throttled. Pick the one that becomes available first.
+  let bestIdx = 0;
+  let bestTime = Infinity;
+  for (let i = 0; i < PROXIES.length; i++) {
+    const t = _proxyThrottle[PROXIES[i].name] || 0;
+    if (t < bestTime) {
+      bestTime = t;
+      bestIdx = i;
+    }
+  }
+  _proxyIndex = bestIdx;
+  return PROXIES[_proxyIndex];
 }
 
 function throttleProxy(name, ms = 60_000) {
@@ -625,7 +641,7 @@ async function fetchSingleMeta(appid) {
 
   const storeUrl = `https://store.steampowered.com/api/appdetails?appids=${appid}&filters=basic,genres,developers,release_date,metacritic,price_overview`;
 
-  const proxy = getNextProxy();
+  const proxy = getCurrentProxy();
   const proxyUrl = proxy.build(storeUrl);
 
   try {
