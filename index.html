@@ -1018,7 +1018,7 @@ function gameCardHtml(appid) {
   // Collection tags (max 2 visible)
   const colls = getCollectionsForGame(appid).filter(c => c.id !== 'hidden' && c.id !== state.activeView);
   const tagHtml = colls.slice(0, 2).map(c =>
-    `<span class="game-card-tag" style="background:${c.color}22;color:${c.color};border:1px solid ${c.color}44">${escHtml(c.name.slice(0,12))}</span>`
+    `<span class="game-card-tag" style="background:${c.color}22;color:${c.color};border:1px solid ${c.color}44">${escHtml(c.name)}</span>`
   ).join('') + (colls.length > 2 ? `<span class="game-card-tag" style="background:var(--bg3);color:var(--muted)">+${colls.length-2}</span>` : '');
 
   const nameHtml = name
